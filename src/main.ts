@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { Timer } from "three/addons/misc/Timer.js";
 import GUI from "lil-gui";
 import "./style.css";
 
@@ -51,10 +52,11 @@ window.addEventListener("resize", () => {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 });
 
-const clock = new THREE.Clock();
+const timer = new Timer();
 
 const tick = () => {
-  const elapsedTime = clock.getElapsedTime();
+  timer.update();
+  const elapsedTime = timer.getElapsed();
 
   // Update objects
   cube.rotation.y = elapsedTime;
