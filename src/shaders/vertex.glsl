@@ -1,41 +1,33 @@
 uniform float uTime;
-uniform float uSize;
+uniform sampler2D uPerlinTexture;
 
-attribute vec3 aRandomness;
-attribute float aScale;
+varying vec2 vUv;
 
-varying vec3 vColor;
+#include ./rotate2D.glsl // it's done by vite-plugin-glsl
 
 void main()
 {
-    /**
-     * Position
-     */
-    vec4 modelPosition = modelMatrix * vec4(position, 1.0);
-                
-    // Rotate
-    float angle = atan(modelPosition.x, modelPosition.z);
-    float distanceToCenter = length(modelPosition.xz);
-    float angleOffset = (1.0 / distanceToCenter) * uTime;
-    angle += angleOffset;
-    modelPosition.x = cos(angle) * distanceToCenter;
-    modelPosition.z = sin(angle) * distanceToCenter;
+    vec3 newPosition = position;
 
-    // Randomness
-    modelPosition.xyz += aRandomness;
+    // Twist
+    float twistPerlin = texture(
+        uPerlinTexture,
+        vec2(0.5, uv.y * 0.2 - uTime * 0.005)
+    ).r;
+    float angle = twistPerlin * 10.0;
+    newPosition.xz = rotate2D(newPosition.xz, angle);
 
-    vec4 viewPosition = viewMatrix * modelPosition;
-    vec4 projectedPosition = projectionMatrix * viewPosition;
-    gl_Position = projectedPosition;
+    // Wind
+    vec2 windOffset = vec2(
+        texture(uPerlinTexture, vec2(0.25, uTime * 0.01)).r - 0.5,
+        texture(uPerlinTexture, vec2(0.75, uTime * 0.01)).r - 0.5
+    );
+    windOffset *= pow(uv.y, 2.0) * 10.0;
+    newPosition.xz += windOffset;
 
-    /**
-     * Size
-     */
-    gl_PointSize = uSize * aScale;
-    gl_PointSize *= (1.0 / - viewPosition.z);
+    // Final position
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
 
-    /**
-     * Color
-     */
-    vColor = color;
+    // Varyings
+    vUv = uv;
 }
