@@ -1,33 +1,26 @@
 uniform float uTime;
-uniform sampler2D uPerlinTexture;
 
-varying vec2 vUv;
+varying vec3 vPosition;
+varying vec3 vNormal;
 
-#include ./rotate2D.glsl // it's done by vite-plugin-glsl
+#include ./random2D.glsl // it's done by vite-plugin-glsl
 
 void main()
 {
-    vec3 newPosition = position;
+    vec4 modelPosition = modelMatrix * vec4(position, 1.0);
 
-    // Twist
-    float twistPerlin = texture(
-        uPerlinTexture,
-        vec2(0.5, uv.y * 0.2 - uTime * 0.005)
-    ).r;
-    float angle = twistPerlin * 10.0;
-    newPosition.xz = rotate2D(newPosition.xz, angle);
+    float glitchTime = uTime - modelPosition.y;
+    float glitchStrength = sin(glitchTime) + sin(glitchTime * 2.34) +  sin(glitchTime * 5.67);
+    glitchStrength /= 3.0;
+    glitchStrength = smoothstep(0.3, 1.0, glitchStrength);
+    glitchStrength *= 0.25;
 
-    // Wind
-    vec2 windOffset = vec2(
-        texture(uPerlinTexture, vec2(0.25, uTime * 0.01)).r - 0.5,
-        texture(uPerlinTexture, vec2(0.75, uTime * 0.01)).r - 0.5
-    );
-    windOffset *= pow(uv.y, 2.0) * 10.0;
-    newPosition.xz += windOffset;
-
-    // Final position
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
-
-    // Varyings
-    vUv = uv;
+    modelPosition.x += (random2D(modelPosition.xz + uTime) - 0.5) * glitchStrength;
+    modelPosition.z += (random2D(modelPosition.zx + uTime) - 0.5) * glitchStrength;
+    
+    gl_Position = projectionMatrix * viewMatrix * modelPosition;
+    vPosition = modelPosition.xyz;
+    vNormal = (modelMatrix * vec4(normal, 0.0)).xyz;
+    // vNormal = normalMatrix * normal;
+    // vNormal = normal;
 }

@@ -1,24 +1,26 @@
-uniform sampler2D uPerlinTexture;
+uniform vec3 uColor;
 uniform float uTime;
 
-varying vec2 vUv;
+varying vec3 vPosition;
+varying vec3 vNormal;
 
 void main()
 {
-    vec2 smokeUv = vUv;
-    smokeUv.x *= 0.5;
-    smokeUv.y *= 0.3;
-    smokeUv.y -= uTime * 0.03;
-    float smoke = texture(uPerlinTexture, smokeUv).r;
+    vec3 normal = normalize(vNormal);
+    normal = mix(normal * -1.0, normal, float(gl_FrontFacing));
 
-    smoke = smoothstep(0.4, 1.0, smoke);
+    float stripes = mod((vPosition.y - uTime * 0.02) * 20.0, 1.0);
+    stripes = pow(stripes, 3.);
 
-    smoke *= smoothstep(0.0, 0.3, vUv.x);
-    smoke *= smoothstep(1.0, 0.7, vUv.x);
-    smoke *= smoothstep(0.0, 0.1, vUv.y);
-    smoke *= smoothstep(1.0, 0.4, vUv.y);
+    vec3 viewDir = normalize(cameraPosition - vPosition);
+    float fresnel = 1.0 - dot(normal, viewDir);
+    fresnel = pow(fresnel, 2.0);
 
-    gl_FragColor = vec4(vec3(1.0), smoke);
+    float falloff = smoothstep(0.98, 0.0, fresnel);
+
+    float holographic = stripes * fresnel + fresnel * 1.25 * falloff;
+    
+    gl_FragColor = vec4(uColor, holographic);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
 }
