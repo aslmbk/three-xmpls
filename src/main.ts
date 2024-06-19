@@ -1,58 +1,46 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Timer } from "three/addons/misc/Timer.js";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import GUI from "lil-gui";
 import vertexShader from "./shaders/vertex.glsl";
 import fragmentShader from "./shaders/fragment.glsl";
+import gsap from "gsap";
+import { Sky } from "three/addons/objects/Sky.js";
 import "./style.css";
 
 const gui = new GUI({ width: 340 });
-const parameters = {
-  clearColor: "#1d1f2a",
-  color: "#70c1ff",
-};
 const sizes = {
   width: window.innerWidth,
   height: window.innerHeight,
 };
 const canvas = document.querySelector("#canvas") as HTMLCanvasElement;
-const gltfLoader = new GLTFLoader();
+const textureLoader = new THREE.TextureLoader();
 const scene = new THREE.Scene();
 
-const material = new THREE.ShaderMaterial({
-  vertexShader,
-  fragmentShader,
-  uniforms: {
-    uTime: new THREE.Uniform(0),
-    uColor: new THREE.Uniform(new THREE.Color(parameters.color)),
-  },
-  transparent: true,
-  side: THREE.DoubleSide,
-  depthWrite: false,
-  blending: THREE.AdditiveBlending,
-});
+const createFireWork = (count: number, fwPosition: THREE.Vector3) => {
+  const positions = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const i3 = i * 3;
+    positions[i3] = Math.random() - 0.5;
+    positions[i3 + 1] = Math.random() - 0.5;
+    positions[i3 + 2] = Math.random() - 0.5;
+  }
 
-const torusKnot = new THREE.Mesh(
-  new THREE.TorusKnotGeometry(0.6, 0.25, 128, 32),
-  material
-);
-torusKnot.position.x = 3;
-scene.add(torusKnot);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
 
-const sphere = new THREE.Mesh(new THREE.SphereGeometry(), material);
-sphere.position.x = -3;
-scene.add(sphere);
-
-let suzanne: THREE.Object3D;
-gltfLoader.load("./suzanne.glb", (gltf) => {
-  suzanne = gltf.scene;
-  suzanne.traverse((child) => {
-    const obj = child as THREE.Mesh;
-    if (obj.isMesh) obj.material = material;
+  const material = new THREE.ShaderMaterial({
+    vertexShader,
+    fragmentShader,
   });
-  scene.add(suzanne);
-});
+
+  const points = new THREE.Points(geometry, material);
+  points.position.copy(fwPosition);
+
+  scene.add(points);
+};
+
+createFireWork(100, new THREE.Vector3(0, 0, 0));
 
 const camera = new THREE.PerspectiveCamera(
   75,
@@ -67,16 +55,8 @@ const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 
 const renderer = new THREE.WebGLRenderer({ canvas });
-renderer.setClearColor(parameters.clearColor);
 renderer.setSize(sizes.width, sizes.height);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-gui.addColor(parameters, "clearColor").onChange(() => {
-  renderer.setClearColor(parameters.clearColor);
-});
-gui.addColor(parameters, "color").onChange(() => {
-  material.uniforms.uColor.value.set(parameters.color);
-});
 
 window.addEventListener("resize", () => {
   // Update sizes
@@ -97,15 +77,6 @@ const timer = new Timer();
 const tick = () => {
   timer.update();
   const elapsedTime = timer.getElapsed();
-  material.uniforms.uTime.value = elapsedTime;
-  if (suzanne) {
-    suzanne.rotation.x = -elapsedTime * 0.1;
-    suzanne.rotation.y = elapsedTime * 0.2;
-  }
-  sphere.rotation.x = -elapsedTime * 0.1;
-  sphere.rotation.y = elapsedTime * 0.2;
-  torusKnot.rotation.x = -elapsedTime * 0.1;
-  torusKnot.rotation.y = elapsedTime * 0.2;
 
   // Update controls
   controls.update();
