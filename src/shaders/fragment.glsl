@@ -55,11 +55,5 @@ void main()
     gl_FragColor = vec4(color, 1.0);
 	#include <tonemapping_fragment>
 	#include <colorspace_fragment>
-
-	// float fogFactor = 1.0 - exp( - uFogDensity * uFogDensity * vFogDepth * vFogDepth );
-	// gl_FragColor.rgb = mix( gl_FragColor.rgb, uFogColor, fogFactor );
-
 	#include <fog_fragment>
-	#include <premultiplied_alpha_fragment>
-	#include <dithering_fragment>
 }
