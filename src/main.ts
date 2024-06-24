@@ -4,140 +4,244 @@ import { Timer } from "three/addons/misc/Timer.js";
 import GUI from "lil-gui";
 import vertexShader from "./shaders/vertex.glsl";
 import fragmentShader from "./shaders/fragment.glsl";
-import gsap from "gsap";
-import { Sky } from "three/addons/objects/Sky.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import "./style.css";
 
 const gui = new GUI({ width: 340 });
+const parameters = {
+  color: "#ff5050",
+  ambientColor: "#ffffff",
+  directionalColor: "#ffe01a",
+  directionalLightPosition: new THREE.Vector3(0, 0, 3),
+  pointColor: "#00ffb3",
+  pointLightPosition: new THREE.Vector3(-2, 3, 1),
+};
 const sizes = {
   width: window.innerWidth,
   height: window.innerHeight,
-  resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
   pixelRatio: Math.min(window.devicePixelRatio, 2),
 };
 const canvas = document.querySelector("#canvas") as HTMLCanvasElement;
-const textureLoader = new THREE.TextureLoader();
+const gltfLoader = new GLTFLoader();
 const scene = new THREE.Scene();
 
-const textures = [
-  textureLoader.load("./particles/1.png"),
-  textureLoader.load("./particles/2.png"),
-  textureLoader.load("./particles/3.png"),
-  textureLoader.load("./particles/4.png"),
-  textureLoader.load("./particles/5.png"),
-  textureLoader.load("./particles/6.png"),
-  textureLoader.load("./particles/7.png"),
-  textureLoader.load("./particles/8.png"),
-];
+const material = new THREE.ShaderMaterial({
+  vertexShader,
+  fragmentShader,
+  uniforms: {
+    uColor: new THREE.Uniform(new THREE.Color(parameters.color)),
 
-const createFireWork = (
-  count: number,
-  fwPosition: THREE.Vector3,
-  size: number,
-  texture: THREE.Texture,
-  radius: number,
-  color: THREE.Color
-) => {
-  const positions = new Float32Array(count * 3);
-  const particleSizes = new Float32Array(count);
-  const timeMultipliers = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
-    const i3 = i * 3;
+    uAmbientLightColor: new THREE.Uniform(
+      new THREE.Color(parameters.ambientColor)
+    ),
+    uAmbientLightIntensity: new THREE.Uniform(0.1),
 
-    const spherical = new THREE.Spherical(
-      radius * (0.75 + Math.random() * 0.25),
-      Math.random() * Math.PI,
-      Math.random() * Math.PI * 2
-    );
+    uDirectionalLightColor: new THREE.Uniform(
+      new THREE.Color(parameters.directionalColor)
+    ),
+    uDirectionalLightIntensity: new THREE.Uniform(1),
+    uDirectionalLightPosition: new THREE.Uniform(
+      parameters.directionalLightPosition
+    ),
+    uDirectionalLightSpecularIntensity: new THREE.Uniform(10),
+    uDirectionalLightSpecularPower: new THREE.Uniform(20),
 
-    const position = new THREE.Vector3().setFromSpherical(spherical);
-    position.toArray(positions, i3);
-
-    particleSizes[i] = Math.random();
-
-    timeMultipliers[i] = 1 + Math.random();
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(positions, 3)
-  );
-  geometry.setAttribute(
-    "aSize",
-    new THREE.Float32BufferAttribute(particleSizes, 1)
-  );
-  geometry.setAttribute(
-    "aTimeMultiplier",
-    new THREE.Float32BufferAttribute(timeMultipliers, 1)
-  );
-
-  texture.flipY = false;
-  const material = new THREE.ShaderMaterial({
-    vertexShader,
-    fragmentShader,
-    uniforms: {
-      uProgress: new THREE.Uniform(0),
-      uSize: new THREE.Uniform(size),
-      uResolution: new THREE.Uniform(
-        sizes.resolution.clone().multiplyScalar(sizes.pixelRatio)
-      ),
-      uTexture: new THREE.Uniform(texture),
-      uColor: new THREE.Uniform(color),
-    },
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-
-  const points = new THREE.Points(geometry, material);
-  points.position.copy(fwPosition);
-
-  scene.add(points);
-
-  gsap.to(material.uniforms.uProgress, {
-    value: 1,
-    duration: 3,
-    ease: "power2.out",
-    onComplete: () => {
-      scene.remove(points);
-      geometry.dispose();
-      material.dispose();
-    },
-  });
-};
-
-createFireWork(
-  100,
-  new THREE.Vector3(),
-  0.5,
-  textures[7],
-  1,
-  new THREE.Color(0x8affff)
-);
-
-window.addEventListener("click", (event) => {
-  const count = Math.round(400 + Math.random() * 1000);
-  const position = new THREE.Vector3(
-    (Math.random() - 0.5) * 2,
-    Math.random(),
-    (Math.random() - 0.5) * 2
-  );
-  const size = 0.1 + Math.random() * 0.1;
-  const texture = textures[Math.floor(Math.random() * textures.length)];
-  const radius = 0.5 + Math.random();
-  const color = new THREE.Color();
-  color.setHSL(Math.random(), 1, 0.7);
-  createFireWork(count, position, size, texture, radius, color);
+    uPointLightColor: new THREE.Uniform(new THREE.Color(parameters.pointColor)),
+    uPointLightIntensity: new THREE.Uniform(10),
+    uPointLightPosition: new THREE.Uniform(parameters.pointLightPosition),
+    uPointLightSpecularIntensity: new THREE.Uniform(1),
+    uPointLightSpecularPower: new THREE.Uniform(32),
+    uPointLightDecay: new THREE.Uniform(0.25),
+  },
 });
 
+const torusKnot = new THREE.Mesh(
+  new THREE.TorusKnotGeometry(0.6, 0.25, 128, 32),
+  material
+);
+torusKnot.position.x = 3;
+scene.add(torusKnot);
+
+// Sphere
+const sphere = new THREE.Mesh(new THREE.SphereGeometry(), material);
+sphere.position.x = -3;
+scene.add(sphere);
+
+// Suzanne
+let suzanne: THREE.Object3D;
+gltfLoader.load("./suzanne.glb", (gltf) => {
+  suzanne = gltf.scene;
+  suzanne.traverse((child) => {
+    const obj = child as THREE.Mesh;
+    if (obj.isMesh) obj.material = material;
+  });
+  scene.add(suzanne);
+});
+
+const directionalLightHelper = new THREE.Mesh(
+  new THREE.PlaneGeometry(),
+  new THREE.MeshBasicMaterial({
+    color: parameters.directionalColor,
+    side: THREE.DoubleSide,
+  })
+);
+directionalLightHelper.position.copy(parameters.directionalLightPosition);
+scene.add(directionalLightHelper);
+
+const pointLightHelper = new THREE.Mesh(
+  new THREE.SphereGeometry(0.1),
+  new THREE.MeshBasicMaterial({ color: parameters.pointColor })
+);
+pointLightHelper.position.copy(parameters.pointLightPosition);
+scene.add(pointLightHelper);
+
+gui.addColor(parameters, "color").onChange(() => {
+  material.uniforms.uColor.value.set(parameters.color);
+});
+
+gui.addColor(parameters, "ambientColor").onChange(() => {
+  material.uniforms.uAmbientLightColor.value.set(parameters.ambientColor);
+});
+gui
+  .add(material.uniforms.uAmbientLightIntensity, "value")
+  .min(0)
+  .max(10)
+  .step(0.01)
+  .name("ambientIntensity");
+
+gui.addColor(parameters, "directionalColor").onChange(() => {
+  material.uniforms.uDirectionalLightColor.value.set(
+    parameters.directionalColor
+  );
+  directionalLightHelper.material.color.set(parameters.directionalColor);
+});
+gui
+  .add(material.uniforms.uDirectionalLightIntensity, "value")
+  .min(0)
+  .max(10)
+  .step(0.01)
+  .name("directionalIntensity");
+gui
+  .add(material.uniforms.uDirectionalLightSpecularIntensity, "value")
+  .min(0)
+  .max(50)
+  .step(0.01)
+  .name("directionalSpecularIntensity");
+gui
+  .add(material.uniforms.uDirectionalLightSpecularPower, "value")
+  .min(1)
+  .max(50)
+  .step(0.01)
+  .name("directionalSpecularPower");
+gui
+  .add(parameters.directionalLightPosition, "x")
+  .min(-10)
+  .max(10)
+  .step(0.01)
+  .onChange(() => {
+    material.uniforms.uDirectionalLightPosition.value.copy(
+      parameters.directionalLightPosition
+    );
+    directionalLightHelper.position.copy(parameters.directionalLightPosition);
+  })
+  .name("directionalX");
+gui
+  .add(parameters.directionalLightPosition, "y")
+  .min(-10)
+  .max(10)
+  .step(0.01)
+  .onChange(() => {
+    material.uniforms.uDirectionalLightPosition.value.copy(
+      parameters.directionalLightPosition
+    );
+    directionalLightHelper.position.copy(parameters.directionalLightPosition);
+  })
+  .name("directionalY");
+gui
+  .add(parameters.directionalLightPosition, "z")
+  .min(-10)
+  .max(10)
+  .step(0.01)
+  .onChange(() => {
+    material.uniforms.uDirectionalLightPosition.value.copy(
+      parameters.directionalLightPosition
+    );
+    directionalLightHelper.position.copy(parameters.directionalLightPosition);
+  })
+  .name("directionalZ");
+
+gui.addColor(parameters, "pointColor").onChange(() => {
+  material.uniforms.uPointLightColor.value.set(parameters.pointColor);
+  pointLightHelper.material.color.set(parameters.pointColor);
+});
+gui
+  .add(material.uniforms.uPointLightIntensity, "value")
+  .min(0)
+  .max(20)
+  .step(0.01)
+  .name("pointIntensity");
+gui
+  .add(material.uniforms.uPointLightSpecularIntensity, "value")
+  .min(0)
+  .max(50)
+  .step(0.01)
+  .name("pointSpecularIntensity");
+gui
+  .add(material.uniforms.uPointLightSpecularPower, "value")
+  .min(1)
+  .max(50)
+  .step(0.01)
+  .name("pointSpecularPower");
+gui
+  .add(material.uniforms.uPointLightDecay, "value")
+  .min(0)
+  .max(1)
+  .step(0.01)
+  .name("pointDecay");
+gui
+  .add(parameters.pointLightPosition, "x")
+  .min(-10)
+  .max(10)
+  .step(0.01)
+  .onChange(() => {
+    material.uniforms.uPointLightPosition.value.copy(
+      parameters.pointLightPosition
+    );
+    pointLightHelper.position.copy(parameters.pointLightPosition);
+  })
+  .name("pointX");
+gui
+  .add(parameters.pointLightPosition, "y")
+  .min(-10)
+  .max(10)
+  .step(0.01)
+  .onChange(() => {
+    material.uniforms.uPointLightPosition.value.copy(
+      parameters.pointLightPosition
+    );
+    pointLightHelper.position.copy(parameters.pointLightPosition);
+  })
+  .name("pointY");
+gui
+  .add(parameters.pointLightPosition, "z")
+  .min(-10)
+  .max(10)
+  .step(0.01)
+  .onChange(() => {
+    material.uniforms.uPointLightPosition.value.copy(
+      parameters.pointLightPosition
+    );
+    pointLightHelper.position.copy(parameters.pointLightPosition);
+  })
+  .name("pointZ");
+
 const camera = new THREE.PerspectiveCamera(
-  25,
+  35,
   sizes.width / sizes.height,
   0.1,
   100
 );
-camera.position.set(1.5, 0, 6);
+camera.position.set(7, 7, 7);
 scene.add(camera);
 
 const controls = new OrbitControls(camera, canvas);
@@ -147,55 +251,10 @@ const renderer = new THREE.WebGLRenderer({ canvas });
 renderer.setSize(sizes.width, sizes.height);
 renderer.setPixelRatio(sizes.pixelRatio);
 
-const sky = new Sky();
-sky.scale.setScalar(450000);
-scene.add(sky);
-
-const sun = new THREE.Vector3();
-
-const skyParameters = {
-  turbidity: 10,
-  rayleigh: 3,
-  mieCoefficient: 0.005,
-  mieDirectionalG: 0.95,
-  elevation: -2.2,
-  azimuth: 180,
-  exposure: renderer.toneMappingExposure,
-};
-
-const updateSky = () => {
-  const uniforms = sky.material.uniforms;
-  uniforms["turbidity"].value = skyParameters.turbidity;
-  uniforms["rayleigh"].value = skyParameters.rayleigh;
-  uniforms["mieCoefficient"].value = skyParameters.mieCoefficient;
-  uniforms["mieDirectionalG"].value = skyParameters.mieDirectionalG;
-
-  const phi = THREE.MathUtils.degToRad(90 - skyParameters.elevation);
-  const theta = THREE.MathUtils.degToRad(skyParameters.azimuth);
-
-  sun.setFromSphericalCoords(1, phi, theta);
-
-  uniforms["sunPosition"].value.copy(sun);
-
-  renderer.toneMappingExposure = skyParameters.exposure;
-  renderer.render(scene, camera);
-};
-
-gui.add(skyParameters, "turbidity", 0.0, 20.0, 0.1).onChange(updateSky);
-gui.add(skyParameters, "rayleigh", 0.0, 4, 0.001).onChange(updateSky);
-gui.add(skyParameters, "mieCoefficient", 0.0, 0.1, 0.001).onChange(updateSky);
-gui.add(skyParameters, "mieDirectionalG", 0.0, 1, 0.001).onChange(updateSky);
-gui.add(skyParameters, "elevation", -3, 10, 0.01).onChange(updateSky);
-gui.add(skyParameters, "azimuth", -180, 180, 0.1).onChange(updateSky);
-gui.add(skyParameters, "exposure", 0, 1, 0.0001).onChange(updateSky);
-
-updateSky();
-
 window.addEventListener("resize", () => {
   // Update sizes
   sizes.width = window.innerWidth;
   sizes.height = window.innerHeight;
-  sizes.resolution.set(sizes.width, sizes.height);
   sizes.pixelRatio = Math.min(window.devicePixelRatio, 2);
 
   // Update camera
@@ -212,6 +271,16 @@ const timer = new Timer();
 const tick = () => {
   timer.update();
   const elapsedTime = timer.getElapsed();
+  if (suzanne) {
+    suzanne.rotation.x = -elapsedTime * 0.1;
+    suzanne.rotation.y = elapsedTime * 0.2;
+  }
+
+  sphere.rotation.x = -elapsedTime * 0.1;
+  sphere.rotation.y = elapsedTime * 0.2;
+
+  torusKnot.rotation.x = -elapsedTime * 0.1;
+  torusKnot.rotation.y = elapsedTime * 0.2;
 
   // Update controls
   controls.update();
