@@ -1,65 +1,65 @@
-uniform vec3 uColor;
+uniform vec3 uDepthColor;
+uniform vec3 uSurfaceColor;
+uniform float uColorOffset;
+uniform float uColorMultiplier;
 
-uniform vec3 uAmbientLightColor;
-uniform float uAmbientLightIntensity;
+uniform vec3 uFogColor;
+uniform float uFogDensity;
 
-uniform vec3 uDirectionalLightColor;
-uniform float uDirectionalLightIntensity;
-uniform vec3 uDirectionalLightPosition;
-uniform float uDirectionalLightSpecularIntensity;
-uniform float uDirectionalLightSpecularPower;
-
-uniform vec3 uPointLightColor;
-uniform float uPointLightIntensity;
-uniform vec3 uPointLightPosition;
-uniform float uPointLightSpecularIntensity;
-uniform float uPointLightSpecularPower;
-uniform float uPointLightDecay;
-
+varying float vElevation;
 varying vec3 vNormal;
 varying vec3 vPosition;
+// varying float vFogDepth;
 
-#include ./ambient-light.glsl
+#include <fog_pars_fragment>
+
 #include ./directional-light.glsl
 #include ./point-light.glsl
 
 void main()
 {
     vec3 normal = normalize(vNormal);
-    vec3 color = uColor;
-    vec3 light = vec3(0.0);
+
     vec3 viewDirection = normalize(vPosition - cameraPosition);
 
-    vec3 ambient = ambientLight(uAmbientLightColor, uAmbientLightIntensity);
-    light += ambient;
+    float mixStrength = (vElevation + uColorOffset) * uColorMultiplier;
+    mixStrength = smoothstep(0.0, 1.0, mixStrength);
+    vec3 color = mix(uDepthColor, uSurfaceColor, mixStrength);
 
-    vec3 directional = directionalLight(
-        uDirectionalLightColor,
-        uDirectionalLightIntensity,
+    vec3 light = vec3(0.0);
+
+    light += directionalLight(
+        vec3(1.0, 0.8, 0.5),
+        1.0,
         normal,
-        uDirectionalLightPosition,
+        vec3(-1.0, 0.5, 0.0),
         viewDirection,
-        uDirectionalLightSpecularIntensity,
-        uDirectionalLightSpecularPower
+        10.0,
+        32.0
     );
-    light += directional;
 
-    vec3 point = pointLight(
-        uPointLightColor,
-        uPointLightIntensity,
+    light += pointLight(
+        vec3(0.2, 0.5, 0.5),
+        13.0,
         normal,
-        uPointLightPosition,
+        vec3(2.0, 3.0, 1.0),
         vPosition,
         viewDirection,
-        uPointLightSpecularIntensity,
-        uPointLightSpecularPower,
-        uPointLightDecay
+        2.0,
+        20.0,
+        0.281
     );
-    light += point;
 
     color *= light;
-
+    
     gl_FragColor = vec4(color, 1.0);
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
+	#include <tonemapping_fragment>
+	#include <colorspace_fragment>
+
+	// float fogFactor = 1.0 - exp( - uFogDensity * uFogDensity * vFogDepth * vFogDepth );
+	// gl_FragColor.rgb = mix( gl_FragColor.rgb, uFogColor, fogFactor );
+
+	#include <fog_fragment>
+	#include <premultiplied_alpha_fragment>
+	#include <dithering_fragment>
 }
