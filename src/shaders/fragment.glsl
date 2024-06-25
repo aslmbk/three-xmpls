@@ -1,59 +1,88 @@
-uniform vec3 uDepthColor;
-uniform vec3 uSurfaceColor;
-uniform float uColorOffset;
-uniform float uColorMultiplier;
+uniform vec3 uColor;
+uniform vec3 uShadowColor;
+uniform vec3 uLightColor;
+uniform vec2 uResolution;
+uniform float uShadowRepetitions;
+uniform float uLightRepetitions;
 
-uniform vec3 uFogColor;
-uniform float uFogDensity;
-
-varying float vElevation;
 varying vec3 vNormal;
 varying vec3 vPosition;
-// varying float vFogDepth;
 
-#include <fog_pars_fragment>
+#define LIGHT_POSITION vec3(1.0, 1.0, 0.0)
 
+#include ./ambient-light.glsl
 #include ./directional-light.glsl
-#include ./point-light.glsl
+
+vec3 halftone(
+    vec3 color,
+    float repetitions,
+    vec3 direction,
+    float low,
+    float high,
+    vec3 pointColor,
+    vec3 normal
+)
+{
+    float intensity = dot(normal, direction);
+    intensity = smoothstep(low, high, intensity);
+
+    vec2 uv = gl_FragCoord.xy / uResolution.y;
+    uv *= repetitions;
+    uv = mod(uv, 1.0);
+
+    float point = distance(uv, vec2(0.5));
+    point = 1.0 - step(0.5 * intensity, point);
+
+    return mix(color, pointColor, point);
+}
 
 void main()
-{
+{   
+    vec3 color = uColor;
+
     vec3 normal = normalize(vNormal);
-
     vec3 viewDirection = normalize(vPosition - cameraPosition);
-
-    float mixStrength = (vElevation + uColorOffset) * uColorMultiplier;
-    mixStrength = smoothstep(0.0, 1.0, mixStrength);
-    vec3 color = mix(uDepthColor, uSurfaceColor, mixStrength);
 
     vec3 light = vec3(0.0);
 
-    light += directionalLight(
-        vec3(1.0, 0.8, 0.5),
-        1.0,
-        normal,
-        vec3(-1.0, 0.5, 0.0),
-        viewDirection,
-        10.0,
-        32.0
+    light += ambientLight(
+        vec3(1.0), // Light color
+        1.0        // Light intensity,
     );
 
-    light += pointLight(
-        vec3(0.2, 0.5, 0.5),
-        13.0,
-        normal,
-        vec3(2.0, 3.0, 1.0),
-        vPosition,
-        viewDirection,
-        2.0,
-        20.0,
-        0.281
+    light += directionalLight(
+        vec3(1.0, 1.0, 1.0), // Light color
+        1.0,                 // Light intensity
+        normal,              // Normal
+        LIGHT_POSITION,      // Light position
+        viewDirection,       // View direction
+        1.0,                 // Specular intensity
+        1.0                  // Specular power
     );
 
     color *= light;
-    
+
+    color = halftone(
+        color,                 // Input color
+        uShadowRepetitions,    // Repetitions
+        vec3(0.0, - 1.0, 0.0), // Direction
+        - 0.8,                 // Low
+        1.5,                   // High
+        uShadowColor,          // Point color
+        normal                 // Normal
+    );
+
+    color = halftone(
+        color,               // Input color
+        uLightRepetitions,   // Repetitions
+        LIGHT_POSITION,      // Direction
+        0.5,                 // Low
+        1.8,                 // High
+        uLightColor,         // Point color
+        normal               // Normal
+    );
+
     gl_FragColor = vec4(color, 1.0);
 	#include <tonemapping_fragment>
 	#include <colorspace_fragment>
-	#include <fog_fragment>
 }

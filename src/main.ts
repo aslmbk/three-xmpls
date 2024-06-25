@@ -2,163 +2,125 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Timer } from "three/addons/misc/Timer.js";
 import GUI from "lil-gui";
-import VS from "./shaders/vertex.glsl";
-import FS from "./shaders/fragment.glsl";
+import vertexShader from "./shaders/vertex.glsl";
+import fragmentShader from "./shaders/fragment.glsl";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import "./style.css";
 
 const gui = new GUI({ width: 340 });
-const debugObject = {
-  depthColor: "#ff4000",
-  surfaceColor: "#151c37",
-  fogColor: "#95ff14",
-  fogDensity: 0.25,
+const parameters = {
+  clearColor: "#26132f",
+  color: "#ff794d",
+  shadowColor: "#8e19b8",
+  lightColor: "#e5ffe0",
 };
 const sizes = {
   width: window.innerWidth,
   height: window.innerHeight,
+  pixelRatio: Math.min(window.devicePixelRatio, 2),
 };
 const canvas = document.querySelector("#canvas") as HTMLCanvasElement;
+const gltfLoader = new GLTFLoader();
 const scene = new THREE.Scene();
 
-const planeGeometry = new THREE.PlaneGeometry(2, 2, 512, 512);
-planeGeometry.deleteAttribute("normal");
-planeGeometry.deleteAttribute("uv");
-const planeMaterial = new THREE.ShaderMaterial({
-  vertexShader: VS,
-  fragmentShader: FS,
+const material = new THREE.ShaderMaterial({
+  vertexShader,
+  fragmentShader,
   uniforms: {
-    uTime: { value: 0 },
-    uBigWavesElevation: { value: 0.2 },
-    uBigWavesFrequency: new THREE.Uniform(new THREE.Vector2(4, 1.5)),
-    uBigWavesSpeed: { value: 0.75 },
-    uSmallWavesElevation: { value: 0.15 },
-    uSmallWavesFrequency: { value: 3 },
-    uSmallWavesSpeed: { value: 0.2 },
-    uSmallIterations: { value: 4 },
-    uDepthColor: { value: new THREE.Color(debugObject.depthColor) },
-    uSurfaceColor: { value: new THREE.Color(debugObject.surfaceColor) },
-    uColorOffset: new THREE.Uniform(0.925),
-    uColorMultiplier: new THREE.Uniform(1),
-    fogColor: new THREE.Uniform(new THREE.Color(debugObject.fogColor)),
-    fogDensity: new THREE.Uniform(debugObject.fogDensity),
+    uColor: { value: new THREE.Color(parameters.color) },
+    uShadowColor: { value: new THREE.Color(parameters.shadowColor) },
+    uLightColor: { value: new THREE.Color(parameters.lightColor) },
+    uResolution: new THREE.Uniform(
+      new THREE.Vector2(
+        sizes.width * sizes.pixelRatio,
+        sizes.height * sizes.pixelRatio
+      )
+    ),
+    uShadowRepetitions: new THREE.Uniform(100),
+    uLightRepetitions: new THREE.Uniform(150),
   },
-  transparent: true,
-  fog: true,
 });
 
-scene.fog = new THREE.FogExp2(debugObject.fogColor, debugObject.fogDensity);
+const torusKnot = new THREE.Mesh(
+  new THREE.TorusKnotGeometry(0.6, 0.25, 128, 32),
+  material
+);
+torusKnot.position.x = 3;
+scene.add(torusKnot);
 
-gui.addColor(debugObject, "depthColor").onChange(() => {
-  planeMaterial.uniforms.uDepthColor.value.set(debugObject.depthColor);
-});
-gui.addColor(debugObject, "surfaceColor").onChange(() => {
-  planeMaterial.uniforms.uSurfaceColor.value.set(debugObject.surfaceColor);
-});
-gui
-  .add(planeMaterial.uniforms.uBigWavesElevation, "value")
-  .min(0)
-  .max(1)
-  .step(0.001)
-  .name("uBigWavesElevation");
-gui
-  .add(planeMaterial.uniforms.uBigWavesFrequency.value, "x")
-  .min(0)
-  .max(10)
-  .step(0.001)
-  .name("uBigWavesFrequencyX");
-gui
-  .add(planeMaterial.uniforms.uBigWavesFrequency.value, "y")
-  .min(0)
-  .max(10)
-  .step(0.001)
-  .name("uBigWavesFrequencyY");
-gui
-  .add(planeMaterial.uniforms.uBigWavesSpeed, "value")
-  .min(0)
-  .max(4)
-  .step(0.001)
-  .name("uBigWavesSpeed");
-gui
-  .add(planeMaterial.uniforms.uSmallWavesElevation, "value")
-  .min(0)
-  .max(1)
-  .step(0.001)
-  .name("uSmallWavesElevation");
-gui
-  .add(planeMaterial.uniforms.uSmallWavesFrequency, "value")
-  .min(0)
-  .max(30)
-  .step(0.001)
-  .name("uSmallWavesFrequency");
-gui
-  .add(planeMaterial.uniforms.uSmallWavesSpeed, "value")
-  .min(0)
-  .max(4)
-  .step(0.001)
-  .name("uSmallWavesSpeed");
-gui
-  .add(planeMaterial.uniforms.uSmallIterations, "value")
-  .min(0)
-  .max(5)
-  .step(1)
-  .name("uSmallIterations");
-gui
-  .add(planeMaterial.uniforms.uColorOffset, "value")
-  .min(0)
-  .max(1)
-  .step(0.001)
-  .name("uColorOffset");
-gui
-  .add(planeMaterial.uniforms.uColorMultiplier, "value")
-  .min(0)
-  .max(10)
-  .step(0.001)
-  .name("uColorMultiplier");
+// Sphere
+const sphere = new THREE.Mesh(new THREE.SphereGeometry(), material);
+sphere.position.x = -3;
+scene.add(sphere);
 
-const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-plane.rotation.x = -Math.PI * 0.5;
-scene.add(plane);
+// Suzanne
+let suzanne: THREE.Object3D;
+gltfLoader.load("./suzanne.glb", (gltf) => {
+  suzanne = gltf.scene;
+  suzanne.traverse((child) => {
+    const obj = child as THREE.Mesh;
+    if (obj.isMesh) obj.material = material;
+  });
+  scene.add(suzanne);
+});
 
 const camera = new THREE.PerspectiveCamera(
-  75,
-  window.innerWidth / window.innerHeight,
+  35,
+  sizes.width / sizes.height,
   0.1,
-  1000
+  100
 );
-camera.position.set(1, 1, 1);
+camera.position.set(7, 7, 7);
 scene.add(camera);
 
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 
 const renderer = new THREE.WebGLRenderer({ canvas });
+renderer.setClearColor(parameters.clearColor);
 renderer.setSize(sizes.width, sizes.height);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setClearColor(debugObject.fogColor);
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.setPixelRatio(sizes.pixelRatio);
 
-gui.addColor(debugObject, "fogColor").onChange(() => {
-  if (scene.fog) scene.fog.color.set(debugObject.fogColor);
-  renderer.setClearColor(debugObject.fogColor);
+gui.addColor(parameters, "clearColor").onChange(() => {
+  renderer.setClearColor(parameters.clearColor);
+});
+gui.addColor(parameters, "color").onChange(() => {
+  material.uniforms.uColor.value.set(parameters.color);
+});
+gui.addColor(parameters, "shadowColor").onChange(() => {
+  material.uniforms.uShadowColor.value.set(parameters.shadowColor);
+});
+gui.addColor(parameters, "lightColor").onChange(() => {
+  material.uniforms.uLightColor.value.set(parameters.lightColor);
 });
 gui
-  .add(debugObject, "fogDensity")
-  .min(0)
-  .max(5)
-  .step(0.001)
-  .onChange(() => {
-    scene.fog = new THREE.FogExp2(debugObject.fogColor, debugObject.fogDensity);
-  });
+  .add(material.uniforms.uShadowRepetitions, "value")
+  .min(1)
+  .max(300)
+  .step(1)
+  .name("Shadow Repetitions");
+gui
+  .add(material.uniforms.uLightRepetitions, "value")
+  .min(1)
+  .max(300)
+  .step(1)
+  .name("Light Repetitions");
 
 window.addEventListener("resize", () => {
   sizes.width = window.innerWidth;
   sizes.height = window.innerHeight;
+  sizes.pixelRatio = Math.min(window.devicePixelRatio, 2);
+
+  material.uniforms.uResolution.value.set(
+    sizes.width * sizes.pixelRatio,
+    sizes.height * sizes.pixelRatio
+  );
 
   camera.aspect = sizes.width / sizes.height;
   camera.updateProjectionMatrix();
 
   renderer.setSize(sizes.width, sizes.height);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(sizes.pixelRatio);
 });
 
 const timer = new Timer();
@@ -166,8 +128,16 @@ const timer = new Timer();
 const tick = () => {
   timer.update();
   const elapsedTime = timer.getElapsed();
+  if (suzanne) {
+    suzanne.rotation.x = -elapsedTime * 0.1;
+    suzanne.rotation.y = elapsedTime * 0.2;
+  }
 
-  planeMaterial.uniforms.uTime.value = elapsedTime;
+  sphere.rotation.x = -elapsedTime * 0.1;
+  sphere.rotation.y = elapsedTime * 0.2;
+
+  torusKnot.rotation.x = -elapsedTime * 0.1;
+  torusKnot.rotation.y = elapsedTime * 0.2;
 
   controls.update();
 
