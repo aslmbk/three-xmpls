@@ -1,88 +1,54 @@
-uniform vec3 uColor;
-uniform vec3 uShadowColor;
-uniform vec3 uLightColor;
-uniform vec2 uResolution;
-uniform float uShadowRepetitions;
-uniform float uLightRepetitions;
+uniform sampler2D uDayTexture;
+uniform sampler2D uNightTexture;
+uniform sampler2D uSpecularCloudsTexture;
+uniform vec3 uSunDirection;
+uniform vec3 uAtmosphereDayColor;
+uniform vec3 uAtmosphereTwilightColor;
 
+varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vPosition;
 
-#define LIGHT_POSITION vec3(1.0, 1.0, 0.0)
-
-#include ./ambient-light.glsl
-#include ./directional-light.glsl
-
-vec3 halftone(
-    vec3 color,
-    float repetitions,
-    vec3 direction,
-    float low,
-    float high,
-    vec3 pointColor,
-    vec3 normal
-)
-{
-    float intensity = dot(normal, direction);
-    intensity = smoothstep(low, high, intensity);
-
-    vec2 uv = gl_FragCoord.xy / uResolution.y;
-    uv *= repetitions;
-    uv = mod(uv, 1.0);
-
-    float point = distance(uv, vec2(0.5));
-    point = 1.0 - step(0.5 * intensity, point);
-
-    return mix(color, pointColor, point);
-}
-
 void main()
-{   
-    vec3 color = uColor;
-
-    vec3 normal = normalize(vNormal);
+{
     vec3 viewDirection = normalize(vPosition - cameraPosition);
+    vec3 normal = normalize(vNormal);
+    vec3 color = vec3(0.0);
+    float sunOrientation = dot(uSunDirection, normal);
 
-    vec3 light = vec3(0.0);
+    vec2 specularCloudsColor = texture(uSpecularCloudsTexture, vUv).rg;
 
-    light += ambientLight(
-        vec3(1.0), // Light color
-        1.0        // Light intensity,
-    );
+    float dayMix = smoothstep(-0.25, 0.5, sunOrientation);
+    vec3 dayColor = texture(uDayTexture, vUv).rgb;
+    vec3 nightColor = texture(uNightTexture, vUv).rgb;
 
-    light += directionalLight(
-        vec3(1.0, 1.0, 1.0), // Light color
-        1.0,                 // Light intensity
-        normal,              // Normal
-        LIGHT_POSITION,      // Light position
-        viewDirection,       // View direction
-        1.0,                 // Specular intensity
-        1.0                  // Specular power
-    );
+    color = mix(nightColor, dayColor, dayMix);
+    
+    float cloudsMix = smoothstep(0.2, 1.0, specularCloudsColor.g);
+    vec3 cloudsColor = vec3(specularCloudsColor.g);
+    cloudsColor = mix(cloudsColor * 0.01, cloudsColor, dayMix);
+    // cloudsMix *= dayMix;
+    color = mix(color, cloudsColor, cloudsMix);
+    
+    float fresnel = dot(viewDirection, normal) + 1.0;
+    fresnel = pow(fresnel, 3.0);
+    
+    float atmosphereDayMix = smoothstep(-0.5, 1.0, sunOrientation);
+    vec3 atmosphereColor = mix(uAtmosphereTwilightColor, uAtmosphereDayColor, atmosphereDayMix);
+    color = mix(color, atmosphereColor, atmosphereDayMix * fresnel);
 
-    color *= light;
+    vec3 reflection = reflect(-uSunDirection, normal);
+    float specular = -dot(reflection, viewDirection);
+    specular = max(specular, 0.0);
+    specular = pow(specular, 32.0);
+    specular *= specularCloudsColor.r;
+    specular *= 1.0 - cloudsMix;
 
-    color = halftone(
-        color,                 // Input color
-        uShadowRepetitions,    // Repetitions
-        vec3(0.0, - 1.0, 0.0), // Direction
-        - 0.8,                 // Low
-        1.5,                   // High
-        uShadowColor,          // Point color
-        normal                 // Normal
-    );
+    vec3 specularColor = mix(vec3(1.0), atmosphereColor, fresnel);
+    color += specularColor * specular;
 
-    color = halftone(
-        color,               // Input color
-        uLightRepetitions,   // Repetitions
-        LIGHT_POSITION,      // Direction
-        0.5,                 // Low
-        1.8,                 // High
-        uLightColor,         // Point color
-        normal               // Normal
-    );
-
+    // Final color
     gl_FragColor = vec4(color, 1.0);
-	#include <tonemapping_fragment>
-	#include <colorspace_fragment>
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
 }

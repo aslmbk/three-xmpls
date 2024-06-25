@@ -4,15 +4,12 @@ import { Timer } from "three/addons/misc/Timer.js";
 import GUI from "lil-gui";
 import vertexShader from "./shaders/vertex.glsl";
 import fragmentShader from "./shaders/fragment.glsl";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import "./style.css";
 
 const gui = new GUI({ width: 340 });
 const parameters = {
-  clearColor: "#26132f",
-  color: "#ff794d",
-  shadowColor: "#8e19b8",
-  lightColor: "#e5ffe0",
+  atmosphereDayColor: "#00aaff",
+  atmosphereTwilightColor: "#f06e0a",
 };
 const sizes = {
   width: window.innerWidth,
@@ -20,101 +17,166 @@ const sizes = {
   pixelRatio: Math.min(window.devicePixelRatio, 2),
 };
 const canvas = document.querySelector("#canvas") as HTMLCanvasElement;
-const gltfLoader = new GLTFLoader();
+const textureLoader = new THREE.TextureLoader();
 const scene = new THREE.Scene();
 
+const earthDayTexture = textureLoader.load("./earth/day.jpg");
+earthDayTexture.colorSpace = THREE.SRGBColorSpace;
+earthDayTexture.anisotropy = 8;
+
+const earthNightTexture = textureLoader.load("./earth/night.jpg");
+earthNightTexture.colorSpace = THREE.SRGBColorSpace;
+earthNightTexture.anisotropy = 8;
+
+const earthSpecularCloudsTexture = textureLoader.load(
+  "./earth/specularClouds.jpg"
+);
+earthSpecularCloudsTexture.anisotropy = 8;
+
+const geometry = new THREE.SphereGeometry(2, 64, 64);
 const material = new THREE.ShaderMaterial({
   vertexShader,
   fragmentShader,
   uniforms: {
-    uColor: { value: new THREE.Color(parameters.color) },
-    uShadowColor: { value: new THREE.Color(parameters.shadowColor) },
-    uLightColor: { value: new THREE.Color(parameters.lightColor) },
-    uResolution: new THREE.Uniform(
-      new THREE.Vector2(
-        sizes.width * sizes.pixelRatio,
-        sizes.height * sizes.pixelRatio
-      )
+    uDayTexture: new THREE.Uniform(earthDayTexture),
+    uNightTexture: new THREE.Uniform(earthNightTexture),
+    uSpecularCloudsTexture: new THREE.Uniform(earthSpecularCloudsTexture),
+    uSunDirection: new THREE.Uniform(new THREE.Vector3(0, 0, 1)),
+    uAtmosphereDayColor: new THREE.Uniform(
+      new THREE.Color(parameters.atmosphereDayColor)
     ),
-    uShadowRepetitions: new THREE.Uniform(100),
-    uLightRepetitions: new THREE.Uniform(150),
+    uAtmosphereTwilightColor: new THREE.Uniform(
+      new THREE.Color(parameters.atmosphereTwilightColor)
+    ),
+  },
+});
+const earth = new THREE.Mesh(geometry, material);
+scene.add(earth);
+
+const atmosphereMaterial = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  transparent: true,
+  vertexShader: `
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+
+    void main()
+    {
+        vec4 modelPosition = modelMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * viewMatrix * modelPosition;
+
+        vec3 modelNormal = (modelMatrix * vec4(normal, 0.0)).xyz;
+
+        vNormal = modelNormal;
+        vPosition = modelPosition.xyz;
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 uSunDirection;
+    uniform vec3 uAtmosphereDayColor;
+    uniform vec3 uAtmosphereTwilightColor;
+
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+
+    void main()
+    {
+        vec3 viewDirection = normalize(vPosition - cameraPosition);
+        vec3 normal = normalize(vNormal);
+        vec3 color = vec3(0.0);
+        
+        float sunOrientation = dot(uSunDirection, normal);
+        
+        float atmosphereDayMix = smoothstep(-0.5, 1.0, sunOrientation);
+        vec3 atmosphereColor = mix(uAtmosphereTwilightColor, uAtmosphereDayColor, atmosphereDayMix);
+        color = mix(color, atmosphereColor, atmosphereDayMix);
+        color += atmosphereColor;
+        
+        float edgeAlpha = dot(viewDirection, normal);
+        edgeAlpha = smoothstep(0.0, 0.5, edgeAlpha);
+
+        float dayAlpha = smoothstep(-0.5, 0.0, sunOrientation);
+
+        float alpha = edgeAlpha * dayAlpha;
+        
+        gl_FragColor = vec4(color, alpha);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+    }
+  `,
+  uniforms: {
+    uSunDirection: new THREE.Uniform(new THREE.Vector3(0, 0, 1)),
+    uAtmosphereDayColor: new THREE.Uniform(
+      new THREE.Color(parameters.atmosphereDayColor)
+    ),
+    uAtmosphereTwilightColor: new THREE.Uniform(
+      new THREE.Color(parameters.atmosphereTwilightColor)
+    ),
   },
 });
 
-const torusKnot = new THREE.Mesh(
-  new THREE.TorusKnotGeometry(0.6, 0.25, 128, 32),
-  material
+const atmosphere = new THREE.Mesh(geometry, atmosphereMaterial);
+atmosphere.scale.set(1.04, 1.04, 1.04);
+scene.add(atmosphere);
+
+const sunSpherical = new THREE.Spherical(1, Math.PI * 0.5, 0.5);
+const sunDirection = new THREE.Vector3();
+const debugSun = new THREE.Mesh(
+  new THREE.IcosahedronGeometry(0.1, 2),
+  new THREE.MeshBasicMaterial()
 );
-torusKnot.position.x = 3;
-scene.add(torusKnot);
+scene.add(debugSun);
 
-// Sphere
-const sphere = new THREE.Mesh(new THREE.SphereGeometry(), material);
-sphere.position.x = -3;
-scene.add(sphere);
+const updateSun = () => {
+  sunDirection.setFromSpherical(sunSpherical);
+  debugSun.position.copy(sunDirection).multiplyScalar(5);
+  material.uniforms.uSunDirection.value.copy(sunDirection);
+  atmosphereMaterial.uniforms.uSunDirection.value.copy(sunDirection);
+};
 
-// Suzanne
-let suzanne: THREE.Object3D;
-gltfLoader.load("./suzanne.glb", (gltf) => {
-  suzanne = gltf.scene;
-  suzanne.traverse((child) => {
-    const obj = child as THREE.Mesh;
-    if (obj.isMesh) obj.material = material;
-  });
-  scene.add(suzanne);
-});
+updateSun();
 
 const camera = new THREE.PerspectiveCamera(
-  35,
+  25,
   sizes.width / sizes.height,
   0.1,
   100
 );
-camera.position.set(7, 7, 7);
+camera.position.set(12, 5, 4);
 scene.add(camera);
 
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 
 const renderer = new THREE.WebGLRenderer({ canvas });
-renderer.setClearColor(parameters.clearColor);
 renderer.setSize(sizes.width, sizes.height);
 renderer.setPixelRatio(sizes.pixelRatio);
+renderer.setClearColor("#000011");
 
-gui.addColor(parameters, "clearColor").onChange(() => {
-  renderer.setClearColor(parameters.clearColor);
+gui.addColor(parameters, "atmosphereDayColor").onChange(() => {
+  material.uniforms.uAtmosphereDayColor.value.set(
+    parameters.atmosphereDayColor
+  );
+  atmosphereMaterial.uniforms.uAtmosphereDayColor.value.set(
+    parameters.atmosphereDayColor
+  );
 });
-gui.addColor(parameters, "color").onChange(() => {
-  material.uniforms.uColor.value.set(parameters.color);
+gui.addColor(parameters, "atmosphereTwilightColor").onChange(() => {
+  material.uniforms.uAtmosphereTwilightColor.value.set(
+    parameters.atmosphereTwilightColor
+  );
+  atmosphereMaterial.uniforms.uAtmosphereTwilightColor.value.set(
+    parameters.atmosphereTwilightColor
+  );
 });
-gui.addColor(parameters, "shadowColor").onChange(() => {
-  material.uniforms.uShadowColor.value.set(parameters.shadowColor);
-});
-gui.addColor(parameters, "lightColor").onChange(() => {
-  material.uniforms.uLightColor.value.set(parameters.lightColor);
-});
-gui
-  .add(material.uniforms.uShadowRepetitions, "value")
-  .min(1)
-  .max(300)
-  .step(1)
-  .name("Shadow Repetitions");
-gui
-  .add(material.uniforms.uLightRepetitions, "value")
-  .min(1)
-  .max(300)
-  .step(1)
-  .name("Light Repetitions");
+gui.add(sunSpherical, "phi").min(0).max(Math.PI).onChange(updateSun);
+
+gui.add(sunSpherical, "theta").min(-Math.PI).max(Math.PI).onChange(updateSun);
 
 window.addEventListener("resize", () => {
   sizes.width = window.innerWidth;
   sizes.height = window.innerHeight;
   sizes.pixelRatio = Math.min(window.devicePixelRatio, 2);
-
-  material.uniforms.uResolution.value.set(
-    sizes.width * sizes.pixelRatio,
-    sizes.height * sizes.pixelRatio
-  );
 
   camera.aspect = sizes.width / sizes.height;
   camera.updateProjectionMatrix();
@@ -128,16 +190,8 @@ const timer = new Timer();
 const tick = () => {
   timer.update();
   const elapsedTime = timer.getElapsed();
-  if (suzanne) {
-    suzanne.rotation.x = -elapsedTime * 0.1;
-    suzanne.rotation.y = elapsedTime * 0.2;
-  }
 
-  sphere.rotation.x = -elapsedTime * 0.1;
-  sphere.rotation.y = elapsedTime * 0.2;
-
-  torusKnot.rotation.x = -elapsedTime * 0.1;
-  torusKnot.rotation.y = elapsedTime * 0.2;
+  earth.rotation.y = elapsedTime * 0.1;
 
   controls.update();
 
