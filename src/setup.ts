@@ -1,7 +1,8 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 import { Timer } from "three/addons/misc/Timer.js";
 import GUI from "lil-gui";
 import "./style.css";
@@ -20,6 +21,7 @@ export const sizes = {
 
 const canvas = document.querySelector("#canvas") as HTMLCanvasElement;
 
+export const rgbeLoader = new RGBELoader();
 const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath("./draco/");
 export const gltfLoader = new GLTFLoader();
@@ -27,15 +29,13 @@ gltfLoader.setDRACOLoader(dracoLoader);
 
 export const scene = new THREE.Scene();
 
-export const gltf = await gltfLoader.loadAsync("./model.glb");
-
 const camera = new THREE.PerspectiveCamera(
   35,
   sizes.width / sizes.height,
   0.1,
   100
 );
-camera.position.set(6, 5, 18);
+camera.position.set(13, -3, -5);
 scene.add(camera);
 
 const controls = new OrbitControls(camera, canvas);
@@ -45,6 +45,10 @@ export const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(sizes.width, sizes.height);
 renderer.setPixelRatio(sizes.pixelRatio);
 renderer.setClearColor(parameters.clearColor);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1;
 
 gui.addColor(parameters, "clearColor").onChange(() => {
   renderer.setClearColor(parameters.clearColor);

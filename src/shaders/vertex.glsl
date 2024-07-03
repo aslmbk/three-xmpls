@@ -1,28 +1,25 @@
-uniform vec2 uResolution;
-uniform sampler2D uParticlesTexture;
-uniform float uSize;
+attribute vec4 tangent;
 
-attribute vec2 aParticlesUv;
-attribute float aSize;
-attribute vec3 aColor;
+#include ./simplexNoise4d.glsl
 
-varying vec3 vColor;
-
-void main()
+float getWobble(vec3 position)
 {
-    vec4 particle = texture(uParticlesTexture, aParticlesUv);
+    return simplexNoise4d(vec4(position, 0.0));
+}
 
-    vec4 modelPosition = modelMatrix * vec4(particle.xyz, 1.0);
-    vec4 viewPosition = viewMatrix * modelPosition;
-    vec4 projectedPosition = projectionMatrix * viewPosition;
-    gl_Position = projectedPosition;
+void main() {
+    vec3 biTangent = cross(normal, tangent.xyz);
 
-    float sizeIn = smoothstep(0.1, 1.0, particle.a);
-    float sizeOut = 1.0 - smoothstep(0.7, 1.0, particle.a);
-    float size = min(sizeIn, sizeOut);
-    
-    gl_PointSize = size * aSize * uSize * uResolution.y;
-    gl_PointSize *= (1.0 / - viewPosition.z);
-    
-    vColor = aColor;
+    float shift = 0.01;
+    vec3 positionA = csm_Position + tangent.xyz * shift;
+    vec3 positionB = csm_Position + biTangent * shift;
+
+    float wobble = getWobble(csm_Position);
+    csm_Position += wobble * normal;
+    positionA += getWobble(positionA) * normal;
+    positionB += getWobble(positionB) * normal;
+
+    vec3 toA = normalize(positionA - csm_Position);
+    vec3 toB = normalize(positionB - csm_Position);
+    csm_Normal = cross(toA, toB);
 }
