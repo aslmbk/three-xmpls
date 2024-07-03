@@ -1,10 +1,29 @@
+uniform float uTime;
+uniform float uPositionFrequency;
+uniform float uTimeFrequency;
+uniform float uStrength;
+uniform float uWarpPositionFrequency;
+uniform float uWarpTimeFrequency;
+uniform float uWarpStrength;
+
 attribute vec4 tangent;
+
+varying float vWobble;
 
 #include ./simplexNoise4d.glsl
 
 float getWobble(vec3 position)
 {
-    return simplexNoise4d(vec4(position, 0.0));
+    vec3 warpedPosition = position;
+    warpedPosition += simplexNoise4d(vec4(
+        position * uWarpPositionFrequency,
+        uTime * uWarpTimeFrequency
+    )) * uWarpStrength;
+
+    return simplexNoise4d(vec4(
+        warpedPosition * uPositionFrequency,
+        uTime * uTimeFrequency
+    )) * uStrength;
 }
 
 void main() {
@@ -22,4 +41,6 @@ void main() {
     vec3 toA = normalize(positionA - csm_Position);
     vec3 toB = normalize(positionB - csm_Position);
     csm_Normal = cross(toA, toB);
+
+    vWobble = wobble / uStrength;
 }
