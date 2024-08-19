@@ -9,10 +9,6 @@ import "./style.css";
 
 export const gui = new GUI({ width: 340 });
 
-const parameters = {
-  clearColor: "#160920",
-};
-
 export const sizes = {
   width: window.innerWidth,
   height: window.innerHeight,
@@ -35,7 +31,7 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   100
 );
-camera.position.set(-5, 5, 12);
+camera.position.set(-10, 6, -2);
 scene.add(camera);
 
 const controls = new OrbitControls(camera, canvas);
@@ -44,15 +40,10 @@ controls.enableDamping = true;
 export const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(sizes.width, sizes.height);
 renderer.setPixelRatio(sizes.pixelRatio);
-renderer.setClearColor(parameters.clearColor);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
-
-gui.addColor(parameters, "clearColor").onChange(() => {
-  renderer.setClearColor(parameters.clearColor);
-});
 
 export const resizeSubscribers: Array<(s: typeof sizes) => void> = [];
 
